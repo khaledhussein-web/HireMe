@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hireme-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hireme_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+    ports:
+      - "5432:5432"
+    volumes:
+      - hireme_postgres_data:/var/lib/postgresql/data
+      - ./backend/src/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hireme_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  hireme_postgres_data:
