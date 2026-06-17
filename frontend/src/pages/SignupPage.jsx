@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { register } from '../api/auth.js'
 import { AuthShell } from '../components/AuthShell.jsx'
 import { SocialLoginButtons } from '../components/SocialLoginButtons.jsx'
@@ -9,11 +9,16 @@ const initialForm = {
   email: '',
   password: '',
   confirmPassword: '',
+  role: 'candidate',
 }
 
 export function SignupPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState(initialForm)
+  const location = useLocation()
+  const [form, setForm] = useState({
+    ...initialForm,
+    role: location.state?.role ?? initialForm.role,
+  })
   const [message, setMessage] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -36,27 +41,15 @@ export function SignupPage() {
     setIsSubmitting(true)
 
     try {
-      const data = await register({
-        fullName: form.fullName,
-        email: form.email,
-        password: form.password,
-      })
-      const developmentToken = data.developmentActionUrl
-        ? new URL(data.developmentActionUrl).searchParams.get('token')
-        : null
-
-      navigate(
-        developmentToken
-          ? `/verify-email?token=${encodeURIComponent(developmentToken)}`
-          : '/verify-email',
-        {
+      const data = await register(form)
+      navigate('/check-email', {
         replace: true,
         state: {
           email: data.email,
           message: data.message,
+          developmentActionUrl: data.developmentActionUrl,
         },
-        },
-      )
+      })
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
     } finally {
@@ -85,6 +78,14 @@ export function SignupPage() {
       )}
 
       <form className="auth-form" onSubmit={handleSubmit}>
+        <label>
+          <span>I am joining as</span>
+          <select name="role" value={form.role} onChange={updateField}>
+            <option value="candidate">Candidate</option>
+            <option value="employer">Employer</option>
+            <option value="tech_community">Tech community</option>
+          </select>
+        </label>
         <label>
           <span>Full name</span>
           <input
@@ -118,7 +119,7 @@ export function SignupPage() {
               name="password"
               value={form.password}
               autoComplete="new-password"
-              placeholder="8+ characters"
+              placeholder="Uppercase, lowercase, and number"
               minLength="8"
               required
               onChange={updateField}

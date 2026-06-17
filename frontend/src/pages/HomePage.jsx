@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { JobCard } from '../components/JobCard.jsx'
-import { fallbackJobs } from '../data/fallbackJobs.js'
+import { getJobs, removeSavedJob, saveJob } from '../api/platform.js'
+import { useAuth } from '../hooks/useAuth.js'
 
 const features = [
   {
@@ -24,59 +25,89 @@ const features = [
   },
   {
     icon: '04',
-    title: 'Direct Communication',
+    title: 'Application Tracking',
     description:
-      'Connect with hiring teams and follow each application in one place.',
+      'Follow every submitted application and prepare for interviews in one place.',
   },
 ]
 
-function normalize(value) {
-  return value.toLowerCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
 export function HomePage() {
-  const [jobs, setJobs] = useState(fallbackJobs)
-  const [keyword, setKeyword] = useState('')
-  const [location, setLocation] = useState('')
+  const { user } = useAuth()
+  const [jobs, setJobs] = useState([])
+  const [jobsMessage, setJobsMessage] = useState('')
+  const [filters, setFilters] = useState({
+    keyword: '',
+    location: '',
+    workplaceType: '',
+    employmentType: '',
+    experienceLevel: '',
+    salaryMin: '',
+    salaryMax: '',
+    industry: '',
+    skills: '',
+    datePublished: '',
+  })
+  const [isSearching, setIsSearching] = useState(true)
 
   useEffect(() => {
-    const controller = new AbortController()
+    let isActive = true
 
-    async function loadJobs() {
-      try {
-        const response = await fetch('/api/jobs', { signal: controller.signal })
-        if (!response.ok) return
-        const data = await response.json()
-        if (Array.isArray(data.jobs) && data.jobs.length > 0) {
-          setJobs(data.jobs)
+    getJobs()
+      .then((data) => {
+        if (isActive && Array.isArray(data.jobs)) setJobs(data.jobs)
+      })
+      .catch((error) => {
+        if (isActive) {
+          setJobs([])
+          setJobsMessage(error.message)
         }
-      } catch (error) {
-        if (error.name !== 'AbortError') {
-          console.info('Using local jobs until the API is available.')
-        }
-      }
+      })
+      .finally(() => {
+        if (isActive) setIsSearching(false)
+      })
+
+    return () => {
+      isActive = false
     }
-
-    loadJobs()
-    return () => controller.abort()
   }, [])
 
-  const filteredJobs = useMemo(() => {
-    const keywordTerms = normalize(keyword).split(' ').filter(Boolean)
-    const normalizedLocation = normalize(location)
+  function updateFilter(event) {
+    setFilters((current) => ({
+      ...current,
+      [event.target.name]: event.target.value,
+    }))
+  }
 
-    return jobs.filter((job) => {
-      const searchable = normalize(
-        `${job.title} ${job.company} ${job.description}`,
-      )
-      const jobLocation = normalize(job.workplaceType)
+  async function loadJobs(nextFilters = filters) {
+    setIsSearching(true)
+    setJobsMessage('')
+    try {
+      const data = await getJobs(nextFilters)
+      if (Array.isArray(data.jobs)) setJobs(data.jobs)
+    } catch (error) {
+      setJobs([])
+      setJobsMessage(error.message)
+    } finally {
+      setIsSearching(false)
+    }
+  }
 
-      return (
-        keywordTerms.every((term) => searchable.includes(term)) &&
-        (normalizedLocation === '' || jobLocation.includes(normalizedLocation))
+  async function toggleSaved(job) {
+    try {
+      if (job.isSaved) {
+        await removeSavedJob(job.id)
+      } else {
+        await saveJob(job.id)
+      }
+      setJobs((current) =>
+        current.map((item) =>
+          item.id === job.id ? { ...item, isSaved: !job.isSaved } : item,
+        ),
       )
-    })
-  }, [jobs, keyword, location])
+    } catch (error) {
+      setJobsMessage(error.message)
+    }
+  }
 
   return (
     <>
@@ -88,41 +119,35 @@ export function HomePage() {
             Connecting talented professionals with great opportunities
             worldwide.
           </p>
-          <div className="hero-search">
+          <form
+            className="hero-search"
+            onSubmit={(event) => {
+              event.preventDefault()
+              loadJobs(filters)
+            }}
+          >
             <input
               className="search-input"
               type="search"
-              value={keyword}
+              name="keyword"
+              value={filters.keyword}
               placeholder="Job title, keywords..."
               aria-label="Search by job title or keyword"
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={updateFilter}
             />
             <input
               className="search-input"
               type="search"
-              value={location}
-              placeholder="Remote, hybrid, on-site..."
-              aria-label="Search by workplace type"
-              onChange={(event) => setLocation(event.target.value)}
+              name="location"
+              value={filters.location}
+              placeholder="City, country, remote..."
+              aria-label="Search by location"
+              onChange={updateFilter}
             />
-            <button className="btn btn-primary" type="button">
-              Search Jobs
+            <button className="btn btn-primary" type="submit">
+              {isSearching ? 'Searching...' : 'Search Jobs'}
             </button>
-          </div>
-          <div className="hero-stats">
-            <div className="stat-item">
-              <h3 className="stat-number">10,000+</h3>
-              <p>Active Jobs</p>
-            </div>
-            <div className="stat-item">
-              <h3 className="stat-number">5,000+</h3>
-              <p>Companies</p>
-            </div>
-            <div className="stat-item">
-              <h3 className="stat-number">50,000+</h3>
-              <p>Candidates</p>
-            </div>
-          </div>
+          </form>
         </div>
       </section>
 
@@ -130,15 +155,109 @@ export function HomePage() {
         <div className="container">
           <p className="section-kicker">Featured opportunities</p>
           <h2 className="section-title">Find a role built for you</h2>
+          <form
+            className="job-filter-panel"
+            onSubmit={(event) => {
+              event.preventDefault()
+              loadJobs(filters)
+            }}
+          >
+            <select
+              name="workplaceType"
+              value={filters.workplaceType}
+              aria-label="Workplace type"
+              onChange={updateFilter}
+            >
+              <option value="">Remote, hybrid or on-site</option>
+              <option value="remote">Remote</option>
+              <option value="hybrid">Hybrid</option>
+              <option value="on_site">On-site</option>
+            </select>
+            <select
+              name="employmentType"
+              value={filters.employmentType}
+              aria-label="Employment type"
+              onChange={updateFilter}
+            >
+              <option value="">Internship, part-time or full-time</option>
+              <option value="internship">Internship</option>
+              <option value="part_time">Part-time</option>
+              <option value="full_time">Full-time</option>
+              <option value="contract">Contract</option>
+              <option value="temporary">Temporary</option>
+            </select>
+            <select
+              name="experienceLevel"
+              value={filters.experienceLevel}
+              aria-label="Experience level"
+              onChange={updateFilter}
+            >
+              <option value="">Experience level</option>
+              <option value="internship">Internship</option>
+              <option value="entry_level">Entry level</option>
+              <option value="mid_level">Mid level</option>
+              <option value="senior_level">Senior level</option>
+            </select>
+            <input
+              name="salaryMin"
+              type="number"
+              min="0"
+              value={filters.salaryMin}
+              placeholder="Min salary"
+              aria-label="Minimum salary"
+              onChange={updateFilter}
+            />
+            <input
+              name="salaryMax"
+              type="number"
+              min="0"
+              value={filters.salaryMax}
+              placeholder="Max salary"
+              aria-label="Maximum salary"
+              onChange={updateFilter}
+            />
+            <input
+              name="industry"
+              value={filters.industry}
+              placeholder="Industry"
+              aria-label="Industry"
+              onChange={updateFilter}
+            />
+            <input
+              name="skills"
+              value={filters.skills}
+              placeholder="Required skills"
+              aria-label="Required skills"
+              onChange={updateFilter}
+            />
+            <select
+              name="datePublished"
+              value={filters.datePublished}
+              aria-label="Date published"
+              onChange={updateFilter}
+            >
+              <option value="">Any publish date</option>
+              <option value="1">Last 24 hours</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+            <button className="btn btn-primary" type="submit">
+              Apply filters
+            </button>
+          </form>
           <div className="jobs-grid">
-            {filteredJobs.map((job) => (
-              <JobCard job={job} key={job.id} />
+            {jobs.map((job) => (
+              <JobCard
+                job={job}
+                key={job.id}
+                onToggleSave={user?.role === 'candidate' ? toggleSaved : null}
+              />
             ))}
           </div>
-          {filteredJobs.length === 0 && (
+          {jobs.length === 0 && (
             <p className="job-search-empty">
-              No jobs match that search. Try broader keywords or another
-              workplace type.
+              {jobsMessage ||
+                'No real jobs are published yet. Approved employers can publish the first role.'}
             </p>
           )}
         </div>

@@ -18,12 +18,33 @@ export function publicUser(user) {
     email: user.email,
     role: user.role,
     emailVerified: Boolean(user.email_verified_at),
-    profileComplete: Boolean(user.profile_complete),
+    accountStatus: user.account_status ?? 'active',
+    profileExists: Boolean(user.profileExists ?? user.profile_exists),
+    profileCompletionPercentage: Number(
+      user.percentage ?? user.profile_completion_percentage ?? 0,
+    ),
+    completedItems: user.completedItems ?? user.completed_items ?? [],
+    missingItems: user.missingItems ?? user.missing_items ?? [],
+    onboardingCompleted: Boolean(
+      user.onboardingCompleted ??
+        user.onboarding_completed ??
+        user.profile_complete,
+    ),
+    profileComplete: Boolean(
+      user.onboardingCompleted ??
+        user.onboarding_completed ??
+        user.profile_complete,
+    ),
+    onboardingStep: Number(user.onboardingStep ?? user.onboarding_step ?? 1),
+    nextRoute: user.next_route ?? '/',
   }
 
+  if (['employer', 'tech_community'].includes(user.role)) {
+    result.verificationStatus =
+      user.verificationStatus ?? user.verification_status ?? 'draft'
+  }
   if (user.role === 'employer') {
-    result.employerVerificationStatus =
-      user.employer_verification_status ?? 'draft'
+    result.employerVerificationStatus = result.verificationStatus
   }
 
   return result

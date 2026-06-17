@@ -9,15 +9,16 @@ export class AuthRequestError extends Error {
 
 async function authRequest(path, options = {}) {
   let response
+  const headers = { ...options.headers }
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
 
   try {
     response = await fetch(`/api/auth${path}`, {
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
       ...options,
+      headers,
     })
   } catch {
     throw new Error(
@@ -86,10 +87,7 @@ export function register(account) {
 }
 
 export function verifyEmail(token) {
-  return authRequest('/verify-email', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
-  })
+  return authRequest(`/verify-email?token=${encodeURIComponent(token)}`)
 }
 
 export function resendVerification(email) {
@@ -121,6 +119,16 @@ export function updateCandidateProfile(profile) {
   return authRequest('/profile', {
     method: 'PUT',
     body: JSON.stringify(profile),
+  })
+}
+
+export function uploadCandidateResume(resume) {
+  const form = new FormData()
+  form.append('resume', resume)
+
+  return authRequest('/profile/resume', {
+    method: 'POST',
+    body: form,
   })
 }
 

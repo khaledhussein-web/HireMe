@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AuthShell } from '../components/AuthShell.jsx'
 import { SocialLoginButtons } from '../components/SocialLoginButtons.jsx'
 import { useAuth } from '../hooks/useAuth.js'
+import { userDestination } from '../utils/authRouting.js'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -34,16 +35,17 @@ export function LoginPage() {
     try {
       const user = await login(form)
       const destination =
-        user.role === 'candidate' && !user.profileComplete
-          ? '/profile'
-          : user.role === 'employer'
-            ? '/employer/company'
-            : user.role === 'admin'
-              ? '/admin/verifications'
-              : location.state?.from ?? '/'
+        user.onboardingCompleted && location.state?.from
+          ? location.state.from
+          : userDestination(user)
       navigate(destination, { replace: true })
     } catch (error) {
       setMessage({ type: 'error', text: error.message })
+      if (error.code === 'EMAIL_NOT_VERIFIED') {
+        navigate('/check-email', {
+          state: { email: form.email, message: error.message },
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }

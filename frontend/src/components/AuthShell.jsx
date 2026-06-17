@@ -28,16 +28,9 @@ export function AuthShell({
               applications moving from one calm workspace.
             </p>
           </div>
-          <div className="auth-proof">
-            <div>
-              <strong>10k+</strong>
-              <span>Open roles</span>
-            </div>
-            <div>
-              <strong>5k+</strong>
-              <span>Hiring teams</span>
-            </div>
-          </div>
+          <p className="auth-story-kicker">
+            Real profiles | Verified employers | Trackable applications
+          </p>
         </aside>
 
         <div className="auth-card">

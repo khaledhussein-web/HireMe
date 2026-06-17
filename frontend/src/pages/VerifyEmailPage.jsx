@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import {
-  resendVerification,
-  verifyEmail,
-} from '../api/auth.js'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { resendVerification } from '../api/auth.js'
 import { AuthShell } from '../components/AuthShell.jsx'
+import { useAuth } from '../hooks/useAuth.js'
 
 export function VerifyEmailPage() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { verifyEmail } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const token = searchParams.get('token')
   const [email, setEmail] = useState(location.state?.email ?? '')
@@ -28,6 +28,9 @@ export function VerifyEmailPage() {
         if (!isActive) return
         setMessage({ type: 'success', text: data.message })
         setSearchParams({}, { replace: true })
+        window.setTimeout(() => {
+          navigate(data.redirectTo || data.user.nextRoute, { replace: true })
+        }, 700)
       })
       .catch((error) => {
         if (isActive) setMessage({ type: 'error', text: error.message })
@@ -39,7 +42,7 @@ export function VerifyEmailPage() {
     return () => {
       isActive = false
     }
-  }, [setSearchParams, token])
+  }, [navigate, setSearchParams, token, verifyEmail])
 
   async function handleResend(event) {
     event.preventDefault()
@@ -75,12 +78,7 @@ export function VerifyEmailPage() {
       {message && (
         <div className={`auth-message ${message.type}`} role="alert">
           {message.text}
-          {message.type === 'success' && (
-            <>
-              {' '}
-              <Link to="/login">Continue to sign in.</Link>
-            </>
-          )}
+          {message.type === 'success' && ' Redirecting to onboarding...'}
         </div>
       )}
 

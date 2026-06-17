@@ -29,7 +29,7 @@ function formatSalary(job) {
   return `${formatter.format(job.salaryMin)} - ${formatter.format(job.salaryMax)}`
 }
 
-export function JobCard({ job }) {
+export function JobCard({ job, showMatch = false, onToggleSave }) {
   const initials = job.company
     .split(/\s+/)
     .map((part) => part[0])
@@ -49,6 +49,9 @@ export function JobCard({ job }) {
         </div>
       </div>
       <div className="job-details">
+        {showMatch && (
+          <span className="match-score">{job.matchScore}% match</span>
+        )}
         <span className="badge">
           {employmentLabels[job.employmentType] ?? job.employmentType}
         </span>
@@ -58,12 +61,28 @@ export function JobCard({ job }) {
         <span className="salary">{formatSalary(job)}</span>
       </div>
       <p className="job-description">{job.description}</p>
-      <Link
-        className="btn btn-secondary"
-        to={`/apply?job=${encodeURIComponent(job.slug)}`}
-      >
-        Apply Now
-      </Link>
+      {showMatch && job.matchedSkills?.length > 0 && (
+        <p className="match-reason">
+          Matching skills: {job.matchedSkills.join(', ')}
+        </p>
+      )}
+      <div className="job-card-actions">
+        <Link
+          className="btn btn-secondary"
+          to={`/apply?job=${encodeURIComponent(job.slug)}`}
+        >
+          View details
+        </Link>
+        {onToggleSave && (
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={() => onToggleSave(job)}
+          >
+            {job.isSaved ? 'Saved' : 'Save'}
+          </button>
+        )}
+      </div>
     </article>
   )
 }

@@ -30,6 +30,9 @@ PostgreSQL server is not already using port `5432`.
 npm run dev
 ```
 
+Running `npm run dev` inside `frontend` also starts both the frontend and
+backend, so API routes remain available during local development.
+
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:5000/api
 - API health check: http://localhost:5000/api/health
@@ -41,14 +44,14 @@ Email/password registration and login are available at:
 - http://localhost:5173/signup
 - http://localhost:5173/login
 
-Candidate authentication includes email verification, login/logout, rotating
-refresh tokens, forgot/reset password, and profile completion. Access and
-refresh tokens use separate HTTP-only cookies.
+Authentication supports Candidate, Employer, and Tech Community registration,
+email verification with automatic sign-in, role-based onboarding, rotating
+refresh tokens, forgot/reset password, and centralized profile completion.
+Access and refresh tokens use separate HTTP-only cookies.
 
-No email provider is configured yet. In development, verification and password
-reset responses include a local action link so the complete flow can be tested.
-Production responses never expose these tokens; connect an email delivery
-provider before deploying registration or password recovery.
+Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and
+`EMAIL_FROM` in `backend/.env` for email delivery. Development responses also
+include a local action link. Production responses never expose tokens.
 
 Social sign-in buttons are prepared for:
 
@@ -79,6 +82,23 @@ WHERE email = 'admin@example.com';
 Employer verification documents are stored privately in
 `backend/private-uploads/company-documents` and are available only through an
 authenticated admin endpoint.
+
+## Role onboarding
+
+- Candidate: `/onboarding/candidate` and `/candidate/dashboard`
+- Employer: `/onboarding/employer` and `/employer/dashboard`
+- Tech Community: `/onboarding/community` and `/community/dashboard`
+- Admin: `/admin/dashboard` and `/admin/verifications`
+
+Candidate CVs are private files. Candidates can download their own CV, approved
+employers can access CVs through candidate workflows, and admins can download
+them from the verification page.
+
+Run the auth/onboarding integration tests with:
+
+```powershell
+npm test
+```
 
 ## Build the frontend
 

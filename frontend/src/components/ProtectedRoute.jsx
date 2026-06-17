@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth.js'
 
 export function ProtectedRoute({
   children,
-  requireCompleteProfile = false,
+  onboardingOnly = false,
   roles,
 }) {
   const location = useLocation()
@@ -32,24 +32,29 @@ export function ProtectedRoute({
     )
   }
 
-  if (roles && !roles.includes(user.role)) {
-    return <Navigate to="/" replace />
-  }
-
-  if (
-    requireCompleteProfile &&
-    user.role === 'candidate' &&
-    !user.profileComplete
-  ) {
+  if (!user.emailVerified) {
     return (
       <Navigate
-        to="/profile"
+        to="/check-email"
         replace
         state={{
-          message: 'Complete your candidate profile before applying.',
+          email: user.email,
+          message: 'Verify your email before continuing.',
         }}
       />
     )
+  }
+
+  if (roles && !roles.includes(user.role)) {
+    return <Navigate to={user.nextRoute || '/'} replace />
+  }
+
+  if (
+    onboardingOnly &&
+    user.onboardingCompleted &&
+    user.profileCompletionPercentage === 100
+  ) {
+    return <Navigate to={user.nextRoute || '/'} replace />
   }
 
   return children

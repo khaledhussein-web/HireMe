@@ -30,6 +30,8 @@ export function requireRole(...allowedRoles) {
           JOIN roles ON roles.id = users.role_id
           WHERE users.id = $1
             AND users.is_active = TRUE
+            AND users.account_status = 'active'
+            AND users.email_verified_at IS NOT NULL
             AND users.deleted_at IS NULL
           LIMIT 1
         `,
@@ -60,6 +62,8 @@ export function requirePermission(permission) {
           JOIN permissions ON permissions.id = role_permissions.permission_id
           WHERE users.id = $1
             AND users.is_active = TRUE
+            AND users.account_status = 'active'
+            AND users.email_verified_at IS NOT NULL
             AND users.deleted_at IS NULL
             AND permissions.code = $2
           LIMIT 1
