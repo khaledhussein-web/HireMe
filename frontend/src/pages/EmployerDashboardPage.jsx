@@ -10,6 +10,7 @@ import {
   getEmployerJobs,
   saveCandidateEvaluation,
   scheduleApplicationInterview,
+  updateApplicationInterview,
   updateApplicationStatus,
   updateEmployerJob,
   updateEmployerJobStatus,
@@ -69,6 +70,24 @@ function label(value) {
 function dateInput(value) {
   if (!value) return ''
   return String(value).slice(0, 10)
+}
+
+function dateTimeInput(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+function interviewToForm(application) {
+  if (!application.interviewId) return { ...emptyInterview }
+  return {
+    interviewType: application.interviewType ?? 'video',
+    startsAt: dateTimeInput(application.interviewStartsAt),
+    endsAt: dateTimeInput(application.interviewEndsAt),
+    locationOrUrl: application.interviewLocationOrUrl ?? '',
+    notes: application.interviewNotes ?? '',
+  }
 }
 
 function formatDate(value) {
@@ -133,7 +152,7 @@ export function EmployerDashboardPage() {
         Object.fromEntries(
           dashboardResult.value.applications.map((application) => [
             application.id,
-            { ...emptyInterview },
+            interviewToForm(application),
           ]),
         ),
       )
@@ -178,7 +197,7 @@ export function EmployerDashboardPage() {
             Object.fromEntries(
               dashboardResult.value.applications.map((application) => [
                 application.id,
-                { ...emptyInterview },
+                interviewToForm(application),
               ]),
             ),
           )
@@ -365,10 +384,18 @@ export function EmployerDashboardPage() {
   async function scheduleInterview(applicationId) {
     setMessage(null)
     try {
-      const data = await scheduleApplicationInterview(
-        applicationId,
-        interviewForms[applicationId],
+      const application = dashboard.applications.find(
+        (item) => item.id === applicationId,
       )
+      const data = application?.interviewId
+        ? await updateApplicationInterview(
+            application.interviewId,
+            interviewForms[applicationId],
+          )
+        : await scheduleApplicationInterview(
+            applicationId,
+            interviewForms[applicationId],
+          )
       setMessage({ type: 'success', text: data.message })
       await loadWorkspace()
     } catch (error) {
@@ -774,14 +801,14 @@ function ApplicantCard({
         Save evaluation
       </button>
       <details className="interview-scheduler">
-        <summary>Schedule interview</summary>
+        <summary>{application.interviewId ? 'Update interview' : 'Schedule interview'}</summary>
         <div className="auth-form">
           <label><span>Type</span><select value={interview.interviewType} onChange={(event) => onInterviewChange(application.id, 'interviewType', event.target.value)}><option value="phone">Phone</option><option value="video">Video</option><option value="on_site">On-site</option><option value="technical">Technical</option><option value="panel">Panel</option></select></label>
           <label><span>Starts</span><input type="datetime-local" value={interview.startsAt} onChange={(event) => onInterviewChange(application.id, 'startsAt', event.target.value)} /></label>
           <label><span>Ends</span><input type="datetime-local" value={interview.endsAt} onChange={(event) => onInterviewChange(application.id, 'endsAt', event.target.value)} /></label>
           <label><span>Location or URL</span><input value={interview.locationOrUrl} onChange={(event) => onInterviewChange(application.id, 'locationOrUrl', event.target.value)} /></label>
           <label><span>Notes</span><textarea rows="2" value={interview.notes} onChange={(event) => onInterviewChange(application.id, 'notes', event.target.value)} /></label>
-          <button className="btn btn-primary" type="button" onClick={() => onScheduleInterview(application.id)}>Schedule</button>
+          <button className="btn btn-primary" type="button" onClick={() => onScheduleInterview(application.id)}>{application.interviewId ? 'Update' : 'Schedule'}</button>
         </div>
       </details>
       <div className="link-row">

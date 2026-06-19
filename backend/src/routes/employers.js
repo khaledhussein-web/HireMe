@@ -613,6 +613,7 @@ employersRouter.get('/notifications', async (request, response, next) => {
           created_at AS "createdAt"
         FROM notifications
         WHERE user_id = $1
+          AND in_app_visible = TRUE
           AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 50

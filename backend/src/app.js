@@ -14,6 +14,7 @@ import { employerWorkspaceRouter } from './routes/employerWorkspace.js'
 import { healthRouter } from './routes/health.js'
 import { jobsRouter } from './routes/jobs.js'
 import { onboardingRouter } from './routes/onboarding.js'
+import { notificationsRouter } from './routes/notifications.js'
 import { rateLimit } from './middleware/rateLimit.js'
 
 export const app = express()
@@ -48,6 +49,7 @@ app.use('/api/admin', adminRouter)
 app.use('/api/applications', applicationsRouter)
 app.use('/api/jobs', jobsRouter)
 app.use('/api/onboarding', onboardingRouter)
+app.use('/api/notifications', notificationsRouter)
 
 app.use((_request, response) => {
   response.status(404).json({ message: 'Route not found' })

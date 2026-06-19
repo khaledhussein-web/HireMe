@@ -9,6 +9,10 @@ import {
   requireRole,
 } from '../middleware/auth.js'
 import { writeAuditLog } from '../services/audit.js'
+import {
+  notifyMatchingCandidates,
+  notifyUser,
+} from '../services/notifications.js'
 
 const EMPLOYMENT_TYPES = new Set([
   'full_time',
@@ -292,6 +296,9 @@ employerWorkspaceRouter.post(
           Number(request.auth.sub),
         ],
       )
+      if (rows[0].status === 'published') {
+        await notifyMatchingCandidates(pool, rows[0].id)
+      }
       return response.status(201).json({
         message:
           job.status === 'published' ? 'Job published.' : 'Job draft created.',
@@ -447,6 +454,9 @@ employerWorkspaceRouter.patch(
       )
       if (!rows[0]) {
         return response.status(404).json({ message: 'Job not found.' })
+      }
+      if (rows[0].status === 'published') {
+        await notifyMatchingCandidates(pool, rows[0].id)
       }
       return response.json({
         message: `Job moved to ${status.replaceAll('_', ' ')}.`,
@@ -688,8 +698,11 @@ employerWorkspaceRouter.get('/dashboard', async (request, response, next) => {
           employer_candidate_evaluations.experience_score AS "experienceScore",
           employer_candidate_evaluations.culture_score AS "cultureScore",
           interviews.id AS "interviewId",
+          interviews.interview_type AS "interviewType",
           interviews.starts_at AS "interviewStartsAt",
+          interviews.ends_at AS "interviewEndsAt",
           interviews.location_or_url AS "interviewLocationOrUrl",
+          interviews.notes AS "interviewNotes",
           COALESCE(
             ARRAY_AGG(skills.name ORDER BY skills.name)
               FILTER (WHERE skills.id IS NOT NULL),
@@ -709,7 +722,7 @@ employerWorkspaceRouter.get('/dashboard', async (request, response, next) => {
           ON employer_candidate_evaluations.application_id = applications.id
           AND employer_candidate_evaluations.employer_user_id = $2
         LEFT JOIN LATERAL (
-          SELECT id, starts_at, location_or_url
+          SELECT id, interview_type, starts_at, ends_at, location_or_url, notes
           FROM interviews
           WHERE interviews.application_id = applications.id
             AND interviews.deleted_at IS NULL
@@ -726,8 +739,11 @@ employerWorkspaceRouter.get('/dashboard', async (request, response, next) => {
           candidate_resumes.id,
           employer_candidate_evaluations.id,
           interviews.id,
+          interviews.interview_type,
           interviews.starts_at,
-          interviews.location_or_url
+          interviews.ends_at,
+          interviews.location_or_url,
+          interviews.notes
         ORDER BY applications.submitted_at DESC
       `,
       [request.company.id, Number(request.auth.sub)],
@@ -796,26 +812,22 @@ employerWorkspaceRouter.patch(
         status,
         applicationId,
       ])
-      if (application.candidate_user_id) {
-        await client.query(
-          `
-            INSERT INTO notifications (
-              user_id,
-              notification_type,
-              title,
-              body,
-              related_entity_type,
-              related_entity_id
-            )
-            VALUES ($1, 'application_status_changed', $2, $3, 'application', $4)
-          `,
-          [
-            application.candidate_user_id,
-            'Application status updated',
-            `${application.title}: ${status.replaceAll('_', ' ')}`,
-            applicationId,
-          ],
-        )
+      if (application.candidate_user_id && application.status !== status) {
+        const shortlisted = status === 'shortlisted'
+        await notifyUser(client, {
+          userId: application.candidate_user_id,
+          type: shortlisted
+            ? 'candidate_shortlisted'
+            : 'application_status_changed',
+          title: shortlisted
+            ? 'You were shortlisted'
+            : 'Application status updated',
+          body: `${application.title}: ${status.replaceAll('_', ' ')}`,
+          entityType: 'application',
+          entityId: applicationId,
+          actionUrl: '/applications',
+          deduplicationKey: `application-status:${applicationId}:${status}`,
+        })
       }
       await writeAuditLog(client, request, {
         action: 'employer.application_status_changed',
@@ -1005,31 +1017,88 @@ employerWorkspaceRouter.post(
         [applicationId],
       )
       if (application.candidate_user_id) {
-        await client.query(
-          `
-            INSERT INTO notifications (
-              user_id,
-              notification_type,
-              title,
-              body,
-              related_entity_type,
-              related_entity_id
-            )
-            VALUES ($1, 'interview_scheduled', $2, $3, 'application', $4)
-          `,
-          [
-            application.candidate_user_id,
-            'Interview scheduled',
-            `${application.title}: ${startsAt.toLocaleString()}`,
-            applicationId,
-          ],
-        )
+        await notifyUser(client, {
+          userId: application.candidate_user_id,
+          type: 'interview_scheduled',
+          title: 'Interview scheduled',
+          body: `${application.title}: ${startsAt.toLocaleString()}`,
+          entityType: 'interview',
+          entityId: rows[0].id,
+          actionUrl: '/applications',
+          deduplicationKey: `interview-scheduled:${rows[0].id}`,
+        })
       }
       await client.query('COMMIT')
       return response.status(201).json({
         message: 'Interview scheduled.',
         interview: rows[0],
       })
+    } catch (error) {
+      await client.query('ROLLBACK')
+      return next(error)
+    } finally {
+      client.release()
+    }
+  },
+)
+
+employerWorkspaceRouter.patch(
+  '/interviews/:interviewId',
+  async (request, response, next) => {
+    const interviewId = Number(request.params.interviewId)
+    const interviewType = cleanText(request.body.interviewType, 30)
+    const startsAt = optionalDate(request.body.startsAt)
+    const endsAt = optionalDate(request.body.endsAt)
+    const locationOrUrl = optionalText(request.body.locationOrUrl, 500)
+    const notes = optionalText(request.body.notes, 2000)
+    if (
+      !Number.isInteger(interviewId) || interviewId < 1 ||
+      !['phone', 'video', 'on_site', 'technical', 'panel'].includes(interviewType) ||
+      !startsAt || !endsAt || endsAt <= startsAt
+    ) {
+      return response.status(400).json({ message: 'Enter valid interview details.' })
+    }
+
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const { rows } = await client.query(
+        `
+          UPDATE interviews
+          SET interview_type = $1, starts_at = $2, ends_at = $3,
+            location_or_url = $4, notes = $5
+          FROM applications, jobs
+          WHERE interviews.id = $6
+            AND applications.id = interviews.application_id
+            AND jobs.id = applications.job_id
+            AND jobs.company_id = $7
+            AND interviews.deleted_at IS NULL
+          RETURNING interviews.id, interviews.application_id,
+            applications.candidate_user_id, jobs.title,
+            interviews.starts_at AS "startsAt",
+            interviews.location_or_url AS "locationOrUrl"
+        `,
+        [interviewType, startsAt, endsAt, locationOrUrl, notes, interviewId, request.company.id],
+      )
+      const interview = rows[0]
+      if (!interview) {
+        await client.query('ROLLBACK')
+        return response.status(404).json({ message: 'Interview not found.' })
+      }
+      if (interview.candidate_user_id) {
+        await notifyUser(client, {
+          userId: interview.candidate_user_id,
+          type: 'interview_updated',
+          title: 'Interview updated',
+          body: `${interview.title}: ${startsAt.toLocaleString()}`,
+          entityType: 'interview',
+          entityId: interviewId,
+          actionUrl: '/applications',
+          deduplicationKey: `interview-updated:${interviewId}:${startsAt.toISOString()}`,
+        })
+      }
+      await client.query('COMMIT')
+      return response.json({ message: 'Interview updated.', interview })
     } catch (error) {
       await client.query('ROLLBACK')
       return next(error)

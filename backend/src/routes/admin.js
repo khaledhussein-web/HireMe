@@ -9,6 +9,7 @@ import {
 } from '../middleware/auth.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import { writeAuditLog } from '../services/audit.js'
+import { notifyUser } from '../services/notifications.js'
 
 const uploadDirectory = path.resolve('private-uploads', 'company-documents')
 const resumeUploadDirectory = path.resolve(
@@ -580,30 +581,20 @@ adminRouter.post(
           decision === 'rejected' ? reason : null,
         ],
       )
-      await client.query(
-        `
-          INSERT INTO notifications (
-            user_id,
-            notification_type,
-            title,
-            body,
-            related_entity_type,
-            related_entity_id
-          )
-          VALUES ($1, $2, $3, $4, 'company', $5)
-        `,
-        [
-          company.owner_user_id,
-          `company_verification_${decision}`,
-          decision === 'approved'
-            ? 'Company verification approved'
-            : 'Company verification rejected',
-          decision === 'approved'
-            ? `${company.name} is now verified.`
-            : reason,
-          companyId,
-        ],
-      )
+      await notifyUser(client, {
+        userId: company.owner_user_id,
+        type: decision === 'approved'
+          ? 'employer_approved'
+          : 'company_verification_rejected',
+        title: decision === 'approved'
+          ? 'Employer approved'
+          : 'Company verification rejected',
+        body: decision === 'approved' ? `${company.name} is now verified.` : reason,
+        entityType: 'company',
+        entityId: companyId,
+        actionUrl: '/employer/company',
+        deduplicationKey: `company-verification:${companyId}:${decision}`,
+      })
       await writeAuditLog(client, request, {
         action: `company.verification_${decision}`,
         entityType: 'company',

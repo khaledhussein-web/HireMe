@@ -22,6 +22,17 @@ function mailTransporter() {
   return transporter
 }
 
+export async function sendEmailMessage({ to, subject, text, html }) {
+  const mailer = mailTransporter()
+  if (!mailer) {
+    console.info(`Development email to ${to}: ${subject}`)
+    return { delivered: false, reason: 'SMTP is not configured.' }
+  }
+
+  await mailer.sendMail({ from: env.smtp.from, to, subject, text, html })
+  return { delivered: true }
+}
+
 export async function sendVerificationEmail({ email, fullName, actionUrl }) {
   const mailer = mailTransporter()
   if (!mailer) {

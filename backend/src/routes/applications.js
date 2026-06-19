@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/pool.js'
 import { requireAuth, requireRole } from '../middleware/auth.js'
+import { notifyUser } from '../services/notifications.js'
 
 export const applicationsRouter = Router()
 
@@ -83,6 +84,8 @@ applicationsRouter.post('/', async (request, response, next) => {
         SELECT
           jobs.id AS job_id,
           jobs.title,
+          jobs.slug,
+          companies.owner_user_id,
           users.full_name,
           users.email,
           candidate_profiles.phone,
@@ -175,27 +178,28 @@ applicationsRouter.post('/', async (request, response, next) => {
         roleAnswers,
       ],
     )
-    await client.query(
-      `
-        INSERT INTO notifications (
-          user_id,
-          notification_type,
-          title,
-          body,
-          related_entity_type,
-          related_entity_id
-        )
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
-        Number(request.auth.sub),
-        'application_submitted',
-        'Application submitted',
-        `Your application for ${applicationData.title} was submitted successfully.`,
-        'application',
-        result.rows[0].id,
-      ],
-    )
+    await notifyUser(client, {
+      userId: Number(request.auth.sub),
+      type: 'application_submitted',
+      title: 'Application submitted',
+      body: `Your application for ${applicationData.title} was submitted successfully.`,
+      entityType: 'application',
+      entityId: result.rows[0].id,
+      actionUrl: '/applications',
+      deduplicationKey: `application-submitted:${result.rows[0].id}:candidate`,
+    })
+    if (applicationData.owner_user_id) {
+      await notifyUser(client, {
+        userId: applicationData.owner_user_id,
+        type: 'application_submitted',
+        title: 'New application received',
+        body: `${applicationData.full_name} applied for ${applicationData.title}.`,
+        entityType: 'application',
+        entityId: result.rows[0].id,
+        actionUrl: '/employer/dashboard',
+        deduplicationKey: `application-submitted:${result.rows[0].id}:employer`,
+      })
+    }
     await client.query('COMMIT')
 
     return response.status(201).json({

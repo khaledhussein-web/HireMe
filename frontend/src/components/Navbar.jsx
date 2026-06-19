@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
+import { NotificationCenter } from './NotificationCenter.jsx'
 
 const publicLinks = [
   { to: '/', label: 'Home' },
@@ -138,6 +139,7 @@ export function Navbar() {
                 ))}
               </div>
               <div className="nav-group nav-auth-links">
+                <NotificationCenter />
                 <button
                   className="nav-action nav-action-quiet"
                   type="button"

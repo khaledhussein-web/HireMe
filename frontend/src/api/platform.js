@@ -141,11 +141,37 @@ export function withdrawApplication(applicationId, reason) {
 
 export function markNotificationRead(notificationId) {
   return platformRequest(
-    `/api/candidate/notifications/${notificationId}/read`,
+    `/api/notifications/${notificationId}/read`,
     {
       method: 'PATCH',
     },
   )
+}
+
+export function getNotifications(limit = 20) {
+  return platformRequest(`/api/notifications?limit=${limit}`)
+}
+
+export function markAllNotificationsRead() {
+  return platformRequest('/api/notifications/read-all', { method: 'POST' })
+}
+
+export function getNotificationPreferences() {
+  return platformRequest('/api/notifications/preferences')
+}
+
+export function saveNotificationPreferences(preferences) {
+  return platformRequest('/api/notifications/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+  })
+}
+
+export function updateApplicationInterview(interviewId, interview) {
+  return platformRequest(`/api/employer-workspace/interviews/${interviewId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(interview),
+  })
 }
 
 export function getEmployerJobs() {

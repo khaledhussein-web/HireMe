@@ -872,7 +872,7 @@ candidateRouter.get('/dashboard', async (request, response, next) => {
         `
           SELECT id, notification_type AS "type", title, body, read_at AS "readAt", created_at AS "createdAt"
           FROM notifications
-          WHERE user_id = $1 AND deleted_at IS NULL
+          WHERE user_id = $1 AND in_app_visible = TRUE AND deleted_at IS NULL
           ORDER BY created_at DESC
           LIMIT 6
         `,
@@ -998,7 +998,7 @@ candidateRouter.get('/notifications', async (request, response, next) => {
       `
         SELECT id, notification_type AS "type", title, body, read_at AS "readAt", created_at AS "createdAt"
         FROM notifications
-        WHERE user_id = $1 AND deleted_at IS NULL
+        WHERE user_id = $1 AND in_app_visible = TRUE AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 50
       `,

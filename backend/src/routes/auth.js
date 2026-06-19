@@ -24,6 +24,7 @@ import {
 } from '../services/auth.js'
 import { writeAuditLog } from '../services/audit.js'
 import { sendVerificationEmail } from '../services/email.js'
+import { notifyUser } from '../services/notifications.js'
 import {
   getAuthUserState,
   persistCompletion,
@@ -365,6 +366,16 @@ async function verifyEmailHandler(request, response, next) {
       `,
       [rows[0].user_id],
     )
+    await notifyUser(client, {
+      userId: rows[0].user_id,
+      type: 'registration_verified',
+      title: 'Registration verified',
+      body: 'Your email is verified and your HireMe account is active.',
+      entityType: 'user',
+      entityId: rows[0].user_id,
+      actionUrl: '/',
+      deduplicationKey: `registration-verified:${rows[0].user_id}`,
+    })
     const user = await findPublicUser(client, rows[0].user_id)
     const refreshToken = await createRefreshSession(
       client,
